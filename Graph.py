@@ -1,6 +1,64 @@
 from collections import defaultdict
 import itertools
-from copy import deepcopy
+from copy import deepcopy, copy
+
+class VertexMapping:
+    def __init__(self, mapping = {}):
+        # Represents a bi-directional mapping between
+        # vertices
+
+        self.AtoB = {}
+        self.BtoA = {}
+        self.add_mapping(mapping)
+
+    def add_mapping(self, mapping):
+        for v1, v2 in mapping.items():
+            self.AtoB[v1] = v2
+            self.BtoA[v2] = v1
+    
+    def remove_mapping(self, keys):
+        for k in keys:
+            if k in self:
+                del self.BtoA[self.AtoB[k]]
+                del self.AtoB[k]
+
+    def __contains__(self, v):
+        return v in self.AtoB.keys()
+
+    def __getitem__(self, key):
+        return self.AtoB[key]
+
+    def __call__(self, g):
+        return Graph((e.map_vertices(self) for e in g.E))
+
+    def __mul__(self, rhs):
+        mapping = {}
+        for a, b in self.AtoB.items():
+            if b in rhs.AtoB.keys():
+                mapping[a] = rhs[b]
+        vm = VertexMapping(mapping)
+        return vm
+    
+    def __invert__(self):
+        m = VertexMapping()
+        # Maybe deepcopy here?
+        m.AtoB = self.BtoA
+        m.BtoA = self.AtoB
+        return m
+
+    def __str__(self):
+        inner = ','.join(map(str,self.AtoB.items()))
+        return f'{{{inner}}}'
+    
+    def __repr__(self):
+        return str(self)
+
+    def __iter__(self):
+        return iter(self.AtoB.keys())
+
+    def clone(self):
+        return deepcopy(self)
+    
 
 class Vertex:
     ID = 0
@@ -36,15 +94,15 @@ class Edge:
     def map_vertices(self, mapping):
         vertices = []
         for v in self.Vertices:
-            if v not in mapping.keys():
-                mapping[v] = Vertex()
+            if v not in mapping:
+                mapping.add_mapping({v:Vertex()})
             vertices.append(mapping[v])
         e = Edge(self.Label, vertices)
         e.Neg = self.Neg
         return e
 
     def clone(self):
-        e = Edge(self.Label, (Vertex() for v in self.Vertices))
+        e = Edge(self.Label, [Vertex() for v in self.Vertices])
         e.Neg = self.Neg
         return e
                 
@@ -106,7 +164,7 @@ class Graph:
         vertices = list(other.V)
         # Try all mappings
         for perm in itertools.permutations(self.V, len(other.V)):
-            mapping = {v1: v2 for v1, v2 in zip(vertices, perm)}
+            mapping = VertexMapping({v1: v2 for v1, v2 in zip(vertices, perm)})
             # Check if its a consistent mapping
             consistent = True
             for v1 in vertices:
@@ -125,12 +183,9 @@ class Graph:
         # Uses the mapping to apply the relationships expressed in other
         # to the vertices in self.
         modified_g = deepcopy(self)
-        for e in other.map_vertices(mapping).E:
+        for e in mapping(other).E:
             modified_g.add_edge(e)
         return modified_g
-
-    def map_vertices(self, mapping):
-        return Graph((e.map_vertices(mapping) for e in self.E))
 
     def clone(self):
         return Graph((e.clone() for e in self.E))
