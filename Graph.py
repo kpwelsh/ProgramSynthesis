@@ -1,12 +1,13 @@
 from collections import defaultdict
 import itertools
 from copy import deepcopy, copy
+from Primes import PRIMES
+
 
 class VertexMapping:
     def __init__(self, mapping = {}):
         # Represents a bi-directional mapping between
         # vertices
-
         self.AtoB = {}
         self.BtoA = {}
         self.add_mapping(mapping)
@@ -27,6 +28,10 @@ class VertexMapping:
 
     def __getitem__(self, key):
         return self.AtoB[key]
+    
+    def __setitem__(self, key, value):
+        self.AtoB[key] = value
+        self.BtoA[value] = key
 
     def __call__(self, g):
         return Graph((e.map_vertices(self) for e in g.E))
@@ -58,11 +63,9 @@ class VertexMapping:
 
     def clone(self):
         return deepcopy(self)
-    
 
 class Vertex:
     ID = 0
-
     def __new__(cls, n = 1):
         if n == 1:
             return super(Vertex, cls).__new__(cls)
@@ -86,10 +89,18 @@ class Vertex:
         return self.Id == other.Id
 
 class Edge:
-    def __init__(self, label, vertices):
+    PRIME_MAPPING = {}
+    def __init__(self, label, vertices, neg = False):
+        if neg:
+            label = "~" + label
+        if label not in Edge.PRIME_MAPPING.keys():
+            Edge.PRIME_MAPPING[label] = PRIMES[len(Edge.PRIME_MAPPING)]
+        self.Prime = Edge.PRIME_MAPPING[label]
         self.Label = label
+
         self.Vertices = vertices
-        self.Neg = False
+        self.Neg = neg
+        #self.HashCache = hash(self.Label) + sum(map(hash, self.Vertices))
 
     def map_vertices(self, mapping):
         vertices = []
@@ -97,13 +108,16 @@ class Edge:
             if v not in mapping:
                 mapping.add_mapping({v:Vertex()})
             vertices.append(mapping[v])
-        e = Edge(self.Label, vertices)
-        e.Neg = self.Neg
+        e = Edge(self.Label.lstrip('~'), vertices, self.Neg)
         return e
 
-    def clone(self):
-        e = Edge(self.Label, [Vertex() for v in self.Vertices])
-        e.Neg = self.Neg
+    def clone(self, mapping):
+        vertices = []
+        for v in self.Vertices:
+            if v not in mapping:
+                mapping[v] = Vertex()
+            vertices.append(mapping[v])
+        e = Edge(self.Label.lstrip('~'), vertices, self.Neg)
         return e
                 
     def __str__(self):
@@ -114,12 +128,11 @@ class Edge:
     def __hash__(self):
         return hash(self.Label) + sum(map(hash, self.Vertices))
     def __eq__(self, other):
-        return self.Label == other.Label and all(v1 == v2 for v1,v2 in zip(self, other)) and self.Neg == other.Neg
+        return self.Label == other.Label and all(v1 == v2 for v1,v2 in zip(self, other))
     def __iter__(self):
         return iter(self.Vertices)
     def __invert__(self):
-        e = Edge(self.Label, self.Vertices)
-        e.Neg = not self.Neg
+        e = Edge(self.Label.lstrip('~'), self.Vertices, not self.Neg)
         return e
 
 class Graph:
@@ -127,6 +140,7 @@ class Graph:
         self.V = set()
         self.E = set()
         self.EdgeMap = defaultdict(set)
+        self.Prime = 1
 
         for e in edges:
             self.add_edge(e)
@@ -137,76 +151,115 @@ class Graph:
             for e in self.EdgeMap[v]:
                 self.E.remove(e)
 
-    def add_edge(self, e):
-        if ~e in self.E:
-            self.E.remove(~e)
+    def remove_edge(self, e):
+        if e in self.E:
+            self.E.remove(e)
+            self.Prime /= e.Prime
             for v in e:
-                self.EdgeMap[v].remove(~e)
-                if len(self.EdgeMap[v]) == 0:
-                    del self.EdgeMap[v]
-                    self.V.remove(v)
-        else:
-            if e not in self.E:
-                self.E.add(e)
-                for v in e:
-                    self.V.add(v)
-                    if e not in self.EdgeMap[v]:
-                        self.EdgeMap[v].add(e)
+                self.EdgeMap[v].remove(e)
+
+    def add_edge(self, e):
+        self.remove_edge(~e)
+        if e not in self.E:
+            self.E.add(e)
+            self.Prime *= e.Prime
+            for v in e:
+                self.V.add(v)
+                if e not in self.EdgeMap[v]:
+                    self.EdgeMap[v].add(e)
     
     def __contains__(self, other):
-        return any(self.match(other))
+        v = self.Prime / other.Prime
+        if int(v) != v:
+            return False
+        return any(self.match(other, proper = True))
 
-    def match(self, other):
+    def match(self, other, proper = False):
         # Checking containment amounts to finding a vertex mapping M from 
         # other.V -> self.V for all other.V such that if R(other.V) then R(M(self.V))
-        if len(self.V) < len(other.V):
+        v = self.Prime / other.Prime
+        if int(v) != v and proper:
             return
         vertices = list(other.V)
         # Try all mappings
+
         for perm in itertools.permutations(self.V, len(other.V)):
             mapping = VertexMapping({v1: v2 for v1, v2 in zip(vertices, perm)})
-            # Check if its a consistent mapping
-            consistent = True
-            for v1 in vertices:
-                for e1 in other.EdgeMap[v1]:
-                    e = Edge(e1.Label, (mapping[v] for v in e1))
-                    if (e not in self.EdgeMap[mapping[v1]]) or (~e in self.EdgeMap[mapping[v1]]):
-                        consistent = False
-                        break
-                if not consistent:
+            g = mapping(other)
+            for e in g.E:
+                if e not in self.E and proper:
+                    break
+                if ~e in self.E:
                     break
             else:
                 yield mapping
         return
 
     def apply(self, other, mapping):
-        # Uses the mapping to apply the relationships expressed in other
-        # to the vertices in self.
-        modified_g = deepcopy(self)
         for e in mapping(other).E:
-            modified_g.add_edge(e)
-        return modified_g
+            self.add_edge(e)
+    
+    def remove(self, other, mapping):
+        for e in mapping(other).E:
+            self.remove_edge(e)
+
+    def prune(self):
+        to_remove = []
+        for v in self.V:
+            if len(self.EdgeMap[v]) == 0:
+                to_remove.append(v)
+        for v in to_remove:
+            self.V.remove(v)
+            del self.EdgeMap[v]
 
     def clone(self):
-        return Graph((e.clone() for e in self.E))
+        mapping = VertexMapping()
+        return Graph([e.clone(mapping) for e in self.E]), mapping
 
     def __hash__(self):
-        return 1 # Dummy hash function to enable convenient set operations
+        return hash(self.Prime)
 
     def __eq__(self, other):
+        if hash(self) != hash(other):
+            return False
+
+        prime_a = defaultdict(list)
+        prime_b = defaultdict(list)
+        for v in other.V:
+            p = 1
+            for e in other.EdgeMap[v]:
+                p *= e.Prime
+            prime_a[p].append(v)
+        for v in self.V:
+            p = 1
+            for e in self.EdgeMap[v]:
+                p *= e.Prime
+            prime_b[p].append(v)
+
+        mapping_groups = [itertools.product(prime_a[k], prime_b[k]) for k in prime_a.keys()]
+        for mapping in itertools.product(*mapping_groups):
+            vm = VertexMapping({k:v for k,v in mapping})
+            for e in other.E:
+                e = e.map_vertices(vm)
+                if e not in self.E:
+                    break
+                if ~e in self.E:
+                    break
+            else:
+                return True
+        return False
+        if len(self.V) != len(other.V) or len(self.E) != len(other.E):
+            return False
         return self in other and other in self
 
     def __str__(self):
-        return '\n'.join(map(str, self.E))
+        return ','.join(map(str, self.E))
     
     def __repr__(self):
         return str(self)
     
     def __iter__(self):
         return iter(self.E)
-    
-    def __or__(self, other):
-        return Graph(itertools.chain(self, other.clone()))
 
     def __getitem__(self, vertices):
         edges = set()
@@ -245,6 +298,8 @@ if __name__ == '__main__':
         ]
     )
 
-    print(g2 in g)
-    for m in g.match(g2):
-        print(m)
+
+
+    #print(g2 in g)
+    #for m in g.match(g2):
+    #    print(m)
