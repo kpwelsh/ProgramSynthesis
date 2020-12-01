@@ -5,7 +5,7 @@ from queue import Queue
 
 class Constraint:
     def __init__(self):
-        self.G = Graph([Edge('Hand', [Vertex()])])
+        self.G = Graph([Edge('asdf', [Vertex()])])
 
     def falsified_by(self, g):
         # Returns True if there is no way to 
@@ -106,12 +106,14 @@ class AbstractStateExplorer:
         for a in self.Actions:
             if self.Constraint.falsified_by(a.Output):
                 continue
-            q.put(a)
+            q.put((1,a))
+        total = 0
+        ignored = 0
 
-        for i in range(40):
-            if q.empty():
+        while not q.empty():
+            n, compound_action = q.get()
+            if n > 8:
                 break
-            compound_action = q.get()
             intermediate = AbstractGraph(compound_action.Input)
             for a in self.Actions:
                 for concrete_graph, out_to_graph in intermediate.match(a.Output):
@@ -124,12 +126,16 @@ class AbstractStateExplorer:
                     concrete_graph.apply(a.Input, in_to_graph)
                     concrete_graph.prune()
                     new_action = Action(concrete_graph, final_graph)
+                    total += 1
                     if new_action not in actions.keys():
                         actions[compound_action] = None
-                        q.put(new_action)
-
-        for a in actions.keys():
+                        q.put((n+1,new_action))
+                    else:
+                        ignored += 1
+        print(ignored, total)
+        for a in actions:
             print(a,'\n')
+        print(len(actions))
 
 
 if __name__ == '__main__':
@@ -156,22 +162,16 @@ if __name__ == '__main__':
         [
             Action(
                 Graph([
-                    ~Edge('Ball', (a,)),
-                    Edge('Hand', (a,))
                 ]),
                 Graph([
-                    ~Edge('Hand', (a,)),
-                    ~Edge('Ball', (a,))
+                    Edge('Ball', (a,)),
                 ])
             ),
             Action(
                 Graph([
-                    ~Edge('Hand', (b,)),
-                    Edge('Ball', (b,))
                 ]),
                 Graph([
-                    ~Edge('Hand', (b,)),
-                    ~Edge('Ball', (b,))
+                    Edge('Hand', (b,)),
                 ])
             )
         ]

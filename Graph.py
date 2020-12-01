@@ -220,7 +220,7 @@ class Graph:
         return hash(self.Prime)
 
     def __eq__(self, other):
-        if hash(self) != hash(other):
+        if self.Prime != other.Prime:
             return False
 
         prime_a = defaultdict(list)
@@ -236,7 +236,11 @@ class Graph:
                 p *= e.Prime
             prime_b[p].append(v)
 
-        mapping_groups = [itertools.product(prime_a[k], prime_b[k]) for k in prime_a.keys()]
+        mapping_groups = []
+        for k in prime_a.keys():
+            a = prime_a[k]
+            b = prime_b[k]
+            mapping_groups.extend([(*zip(perm, b),) for perm in itertools.permutations(a)])
         for mapping in itertools.product(*mapping_groups):
             vm = VertexMapping({k:v for k,v in mapping})
             for e in other.E:
@@ -248,9 +252,6 @@ class Graph:
             else:
                 return True
         return False
-        if len(self.V) != len(other.V) or len(self.E) != len(other.E):
-            return False
-        return self in other and other in self
 
     def __str__(self):
         return ','.join(map(str, self.E))
@@ -279,7 +280,6 @@ if __name__ == '__main__':
     
     g = Graph(
         [
-            Edge('Holding', (a, b)),
             Edge('Hand', (a,)),
             Edge('Ball', (b,)),
             Edge('Ball', (c,))
@@ -299,6 +299,8 @@ if __name__ == '__main__':
     )
 
 
+    print(g2 == g)
+    
 
     #print(g2 in g)
     #for m in g.match(g2):
