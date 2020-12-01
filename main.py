@@ -127,7 +127,6 @@ class AbstractStateExplorer:
                     if new_action not in actions.keys():
                         actions[compound_action] = None
                         q.put((n+1,new_action))
-        print(ignored, total)
         for a in actions:
             print(a,'\n')
         print(len(actions))
