@@ -107,8 +107,6 @@ class AbstractStateExplorer:
             if self.Constraint.falsified_by(a.Output):
                 continue
             q.put((1,a))
-        total = 0
-        ignored = 0
 
         while not q.empty():
             n, compound_action = q.get()
@@ -126,12 +124,9 @@ class AbstractStateExplorer:
                     concrete_graph.apply(a.Input, in_to_graph)
                     concrete_graph.prune()
                     new_action = Action(concrete_graph, final_graph)
-                    total += 1
                     if new_action not in actions.keys():
                         actions[compound_action] = None
                         q.put((n+1,new_action))
-                    else:
-                        ignored += 1
         print(ignored, total)
         for a in actions:
             print(a,'\n')
