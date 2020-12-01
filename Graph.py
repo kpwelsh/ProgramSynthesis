@@ -243,8 +243,6 @@ class Graph:
             mapping_groups.append(
                 [itertools.zip_longest(perm, b) for perm in itertools.permutations(a)]
             )
-        import time
-        s = time.time()
         for mapping in itertools.product(*mapping_groups):
             vm = VertexMapping({k:v for k,v in itertools.chain(*mapping)})
             for e in other.E:
