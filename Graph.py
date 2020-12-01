@@ -240,9 +240,13 @@ class Graph:
         for k in prime_a.keys():
             a = prime_a[k]
             b = prime_b[k]
-            mapping_groups.extend([(*zip(perm, b),) for perm in itertools.permutations(a)])
+            mapping_groups.append(
+                [itertools.zip_longest(perm, b) for perm in itertools.permutations(a)]
+            )
+        import time
+        s = time.time()
         for mapping in itertools.product(*mapping_groups):
-            vm = VertexMapping({k:v for k,v in mapping})
+            vm = VertexMapping({k:v for k,v in itertools.chain(*mapping)})
             for e in other.E:
                 e = e.map_vertices(vm)
                 if e not in self.E:

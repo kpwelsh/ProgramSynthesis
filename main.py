@@ -101,7 +101,7 @@ class AbstractStateExplorer:
         self.Actions = actions
 
     def compile(self):
-        actions = {}
+        actions = set()
         q = Queue()
         for a in self.Actions:
             if self.Constraint.falsified_by(a.Output):
@@ -124,12 +124,13 @@ class AbstractStateExplorer:
                     concrete_graph.apply(a.Input, in_to_graph)
                     concrete_graph.prune()
                     new_action = Action(concrete_graph, final_graph)
-                    if new_action not in actions.keys():
-                        actions[compound_action] = None
+                    l = len(actions)
+                    actions.add(new_action)
+                    if l != len(actions):
                         q.put((n+1,new_action))
         for a in actions:
             print(a,'\n')
-        print(len(actions))
+        print(len(actions), q.qsize())
 
 
 if __name__ == '__main__':
