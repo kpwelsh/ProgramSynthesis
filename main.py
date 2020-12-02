@@ -15,7 +15,8 @@ class Constraint:
         return self.G in g
 
 class Action:
-    def __init__(self, input, output, mapping = None):
+    def __init__(self, label, input, output, mapping = None, compound = None):
+        self.Label = label
         self.Input = input
         self.Output = output
         if mapping is None:
@@ -30,6 +31,11 @@ class Action:
 
         self.ToRemove = set(v for v in self.Input.V if v not in self.InOutMapping)
 
+        #this is used to track what actions/mappings are needed to complete a "compound action"
+        if compound is None:
+            self.CompoundActionTracker = [(self.Label,self.InOutMapping)]
+        else:
+            self.CompoundActionTracker = compound
 
         self.ActionGraph = Graph([*self.Input.E, *self.Output.E])
         for i,o in self.InOutMapping.AtoB.items():
@@ -102,8 +108,11 @@ class AbstractStateExplorer:
         self.Constraint = constraint
         self.Actions = actions
 
+        self.CompoundActionsList = set()
+
     def compile(self):
-        actions = set()
+        #note, renamed/relocated actions to self.CompoundActionsList so that I could access it from a different function
+        #actions = set() 
         q = Queue()
         for a in self.Actions:
             if self.Constraint.falsified_by(a.Output):
@@ -127,15 +136,60 @@ class AbstractStateExplorer:
 
                     concrete_graph.prune()
                     concrete_graph.process()
-
-                    new_action = Action(concrete_graph, final_graph)
-                    l = len(actions)
-                    actions.add(new_action)
-                    if l != len(actions):
+                    new_action = Action('compound',concrete_graph, final_graph, compound=deepcopy(compound_action.CompoundActionTracker))
+                    new_action.CompoundActionTracker.append((a.Label, in_to_graph)) #add the newest step to the compound action
+                    #l = len(actions)
+                    #actions.add(new_action)
+                    l = len(self.CompoundActionsList)
+                    self.CompoundActionsList.add(new_action)
+                    #if l != len(actions):
+                    if l != len(self.CompoundActionsList):
                         q.put((n+1,new_action))
-        for a in actions:
-            print(a,'\n')
-        print(len(actions), q.qsize())
+        ##for a in actions:
+        for a in self.CompoundActionsList:
+            print(a, '\n')
+            print(a.CompoundActionTracker)
+        ##print(len(actions), q.qsize())
+        print(len(self.CompoundActionsList), q.qsize())
+
+    #tries the actions and compound actions 
+    #to see if one will work with the given input
+    #to satisfy the constraints
+    def find_solution(self, initial_state):
+        for action in self.Actions:
+            curr_state = deepcopy(initial_state)
+            curr_state.apply(action.Output, action.InOutMapping.clone())
+            
+            #then check if it meets constraint
+            if self.Constraint.falsified_by(curr_state):
+                print("this does not meet the constraint")
+                continue
+            else:
+                return action
+
+        for a_set in self.CompoundActionsList:
+            #first apply the compound action
+            curr_state = deepcopy(initial_state)
+            for a in a_set.CompoundActionTracker:
+                action = self.find_action(a[0])
+                if action is not None:
+                    curr_state.apply(action.Output, a[1].clone())
+            
+            #then check if it meets constraint
+            if self.Constraint.falsified_by(curr_state):
+                print("this does not meet the constraint")
+                continue
+            else:
+                return a_set
+
+        return None
+
+    #returns an action given the action's name
+    def find_action(self, name):
+        for a in self.Actions:
+            if a.Label == name:
+                return a
+        return None
 
 
 if __name__ == '__main__':
@@ -160,7 +214,7 @@ if __name__ == '__main__':
 
     ase = AbstractStateExplorer(Constraint(), 
         [
-            Action(
+            Action('make_ball',
                 Graph([
                     Edge('Hand', (b,))
                 ]),
@@ -169,14 +223,13 @@ if __name__ == '__main__':
                     Edge('Hand', (b,))
                 ])
             ),
-            # Action(
-            #     Graph([
-            #         ~Edge('Hand', (b,)),
-            #     ]),
-            #     Graph([
-            #         Edge('Hand', (b,)),
-            #     ])
-            # )
+            Action('make_hand',
+                Graph([
+                ]),
+                Graph([
+                    Edge('Hand', (b,)),
+                ])
+            )
         ]
     )
 
@@ -186,5 +239,7 @@ if __name__ == '__main__':
     p.enable()
     ase.compile()
     p.disable()
+    sol = ase.find_solution(g) #right now it just returns the first action it applies just because anything meets the constraints
+    print(sol.CompoundActionTracker)
     Stats(p).sort_stats('cumtime').print_stats()
 
