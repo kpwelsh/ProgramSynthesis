@@ -144,7 +144,31 @@ class Graph:
 
         for e in edges:
             self.add_edge(e)
+        self.process()
+
+    def process(self):
+        self.SubGraphs = defaultdict(int)
+        seen = set()
+        for v in self.V:
+            if v not in seen:
+                component = self.connected_component(v)
+                seen |= component
+                if len(component) == len(self.V):
+                    self.SubGraphs[self] += 1
+                    break
+                self.SubGraphs[self[component]] += 1
+
     
+    def connected_component(self, v, component = None):
+        if component is None:
+            component = set()
+        component.add(v)
+        for e in self.EdgeMap[v]:
+            for v in e:
+                if v not in component:
+                    self.connected_component(v, component)
+        return component
+
     def remove_vertex(self, v):
         if v in self.V:
             self.V.remove(v)
@@ -216,13 +240,23 @@ class Graph:
         mapping = VertexMapping()
         return Graph([e.clone(mapping) for e in self.E]), mapping
 
+    def __deepcopy__(self, memo):
+        return Graph([deepcopy(e, memo) for e in self.E])
+
     def __hash__(self):
         return hash(self.Prime)
 
     def __eq__(self, other):
         if self.Prime != other.Prime:
             return False
-
+        
+        if len(self.SubGraphs) != len(other.SubGraphs):
+            return False
+        if len(self.SubGraphs) > 1:
+            for a, c in self.SubGraphs.items():
+                if a not in other.SubGraphs.keys() or other.SubGraphs[a] != c:
+                    return False
+            return True
         prime_a = defaultdict(list)
         prime_b = defaultdict(list)
         for v in other.V:
@@ -283,7 +317,7 @@ if __name__ == '__main__':
     g = Graph(
         [
             Edge('Hand', (a,)),
-            Edge('Ball', (b,)),
+            Edge('Ball', (a,)),
             Edge('Ball', (c,))
         ]
     )
@@ -294,7 +328,7 @@ if __name__ == '__main__':
 
     g2 = Graph(
         [
-            Edge('Ball', (a,)),
+            Edge('Ball', (b,)),
             Edge('Ball', (c,)),
             Edge('Hand', (b,))
         ]

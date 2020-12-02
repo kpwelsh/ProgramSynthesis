@@ -79,6 +79,8 @@ class AbstractGraph:
                     # applying the graph to the current concrete one
                     next_concrete_graph = deepcopy(self.ConcreteGraph)
                     next_concrete_graph.apply(g, mapping)
+                    next_concrete_graph.prune()
+                    next_concrete_graph.process()
                     if next_concrete_graph not in distinct_graphs:
                         distinct_graphs.add(next_concrete_graph)
                         yield next_concrete_graph, mapping
@@ -106,11 +108,11 @@ class AbstractStateExplorer:
         for a in self.Actions:
             if self.Constraint.falsified_by(a.Output):
                 continue
-            q.put((1,a))
+            q.put((1, a))
 
         while not q.empty():
             n, compound_action = q.get()
-            if n > 8:
+            if n > 5:
                 break
             intermediate = AbstractGraph(compound_action.Input)
             for a in self.Actions:
@@ -122,7 +124,10 @@ class AbstractStateExplorer:
                     in_to_graph = a.InOutMapping * out_to_graph
                     concrete_graph.remove(a.Output, out_to_graph)
                     concrete_graph.apply(a.Input, in_to_graph)
+
                     concrete_graph.prune()
+                    concrete_graph.process()
+
                     new_action = Action(concrete_graph, final_graph)
                     l = len(actions)
                     actions.add(new_action)
@@ -157,18 +162,21 @@ if __name__ == '__main__':
         [
             Action(
                 Graph([
+                    Edge('Hand', (b,))
                 ]),
                 Graph([
                     Edge('Ball', (a,)),
+                    Edge('Hand', (b,))
                 ])
             ),
-            Action(
-                Graph([
-                ]),
-                Graph([
-                    Edge('Hand', (b,)),
-                ])
-            )
+            # Action(
+            #     Graph([
+            #         ~Edge('Hand', (b,)),
+            #     ]),
+            #     Graph([
+            #         Edge('Hand', (b,)),
+            #     ])
+            # )
         ]
     )
 
